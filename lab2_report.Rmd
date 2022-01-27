@@ -1,0 +1,15 @@
+---  
+title: Machine Learning Lab2 block1
+author : 
+    - "Noaman Faisal Bin Badar (noaba574)"
+    - "Adeel Ahmed (adeah090)"
+output: 
+  pdf_document: default
+
+---
+```{r child = 'adeel_part.rmd'}
+```
+
+```{r child = 'code_appendix.Rmd'}
+```
+

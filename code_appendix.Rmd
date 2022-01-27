@@ -1,0 +1,6 @@
+
+# Code Appendix
+## Q-2
+```{r ref.label=c('data_loading_and_libraries', 'filter_data', 'clean_data', 'data_segregation', 'find_optimal_k', 'data_segregation_and_confusion_matrix', 'easiest_and_hardest_and_print_digit', 'nnet_multinom_part', 'f1_score_multinom', 'final_comparison'), echo=TRUE, eval=FALSE}
+
+```

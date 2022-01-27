@@ -1,0 +1,294 @@
+
+In our project we would be working with a classic machine learning challenge: the MNIST digit database. Our challenge is to use the MNIST data to classify the handwritten digits by using different techniques that we have covered in out curriculum.
+
+The data set contains 60,000 rows of hand written digits. each row contains 785 columns, these columns represent image of 28 x 28 pixel and the first column represents the actual output of the digit. In our project we will be using only 2 percent (1,200 rows) of the rows for training, testing and evaluating the results. This is because working on all 100 percent (60,000 rows) of data can be cumbersome for our computers and as per requirement we are allowed to use at least 1,000 rows of data.
+
+The format of these is easy to understand:
+
++ The first value is the "label", that is, the actual digit that the handwriting is supposed to represent, such as a "7" or a "9". 
++ The subsequent values, all comma separated, are the pixel values of the handwritten digit. The size of the pixel array is 28 by 28, so there are 784 values after the label.
+
+
+### Loading dataset
+
+data can be downloaded from the following 
+https://pjreddie.com/media/files/mnist_train.csv"
+```{r data_loading_and_libraries, echo=FALSE}
+library("ggpubr")
+library(class)
+library(ggplot2)
+library(kknn)
+library(caret)
+library(MLmetrics)
+library(nnet)
+
+# data <- read.csv("https://pjreddie.com/media/files/mnist_train.csv", header = FALSE)
+data <- read.csv("mnist_train.csv", header = FALSE)
+seed_var <- 12345
+```
+
+we are using only 2 percent of whole data, which is 1200 rows
+```{r filter_data, echo=FALSE}
+data_percent <- 2
+data_percent <- as.numeric(data_percent / 100)
+n=dim(data)[1]
+set.seed(seed_var) 
+id=sample(1:n, floor(n*data_percent)) 
+data=data[id,] 
+print(dim(data))
+```
+
+cleaning and name the data with naming
+```{r clean_data, echo=FALSE}
+# naming the columns
+# names(data) <- c('label',c(1:784))
+data[, 1:785] <- sapply(data[, 1:785], as.integer)
+```
+# KNN
+
+  Our first model of choice is k-nearest neighbors (KNN), 
+This algorithm is a simple, easy-to-implement supervised machine learning algorithm which can be used to solve both classification and regression problems. The KNN algorithm assumes that similar things exist in close proximity. In other words, similar things are near to each other.
+
+
+Task break down for KNN
+
+  1. We will use hold out method and divide the data in training, validation and testing part. On validation part, we will run each model and then the finally we will compare the accuracy of all models using test.
+
+  2. Run KNN alrorighm with different values of K on validation part of data to find the optimal value of K.
+
+  3. Plot our graph of accuracy with respect to K
+
+  4. Calculate confusion matrix
+
+```{r data_segregation, echo=FALSE}
+segregate_data <- function(total_rows, train_size, equal_valid_test_size){
+    # setting seeds again
+    set.seed(12345)
+    # seeds for random function and get train ids
+    train_ids=sample(1:total_rows, floor(total_rows * as.numeric(train_size)))
+    # remaining_ids
+    remaining_ids = setdiff(1:total_rows, train_ids)
+    # setting seeds again
+    set.seed(12345)
+    # test_ids
+    test_ids=sample(remaining_ids, 
+            floor(length(remaining_ids) * as.numeric(equal_valid_test_size)))
+    # get valid ids
+    valid_ids = setdiff(remaining_ids, test_ids)
+    return (list(train_ids, test_ids, valid_ids))
+}
+
+```
+Training KNN and run it accross different values of K from 1 to 30 and find what K is optimal for validation
+```{r find_optimal_k, echo=FALSE}
+find_optimal_k_with_data_size_variations <- function(k, train_size, 
+                                                     test_and_validation_size){
+    
+    segration_list <- segregate_data(dim(data)[1], train_size, 
+                                     test_and_validation_size)
+    train_data <- data[segration_list[[1]], ]
+    test_data <- data[segration_list[[2]], ]
+    valid_data <- data[segration_list[[3]], ]
+    print("Training data dimensions")
+    
+    optimal_k_data <- data.frame()
+    for (k in c(1:30)) {
+        classifier_knn <- kknn(as.factor(V1)~.,
+                              train = train_data,
+                              test = valid_data,
+                              k = k,
+                              kernel="rectangular"
+        )
+        kknn.fit <- fitted(classifier_knn)
+        confusion_matrix <- table(valid_data$V1, kknn.fit)
+        accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+        optimal_k_data <- rbind(optimal_k_data, c(k, 1-accuracy, accuracy))
+    }
+    colnames(optimal_k_data) = c("k", "misclassification_error", "accuracy")
+    return (list(optimal_k_data))
+}
+# for trainsize 60 and valid and test size 20 20 each.
+result1 <- find_optimal_k_with_data_size_variations(30, 0.6, 0.5)
+dataset_60_20_20 <- result1[[1]]
+# for trainsize 80 and valid and test size 10 10 each.
+result2 <- find_optimal_k_with_data_size_variations(30, 0.8, 0.5)
+dataset_80_10_10 <- result2[[1]]
+# for trainsize 70 and valid and test size 15 15 each.
+result3 <- find_optimal_k_with_data_size_variations(30, 0.7, 0.5)
+dataset_70_15_15 <- result3[[1]]
+
+ggplot(dataset_60_20_20) +
+    geom_line(aes(x=k, y=misclassification_error), color="red") +
+    geom_line(data=dataset_80_10_10, aes(x=k, y=misclassification_error), 
+               color="blue") +
+    geom_line(data=dataset_70_15_15, aes(x=k, y=misclassification_error), 
+              color="yellow")
+    ggtitle("Errors of KNN with respect to value of K")
+
+```
+From this data, we can conclude that dataset with 70% train and 15% valid and 15% test is 
+good option. If we keep underfit and overfit in mind then optimal value of k=7
+so with these values, we divide data and set optimal k value
+
+```{r data_segregation_and_confusion_matrix, echo=FALSE}
+segration_list <- segregate_data(dim(data)[1], 0.7, 0.5)
+train_data <- data[segration_list[[1]], ]
+test_data <- data[segration_list[[2]], ]
+valid_data <- data[segration_list[[3]], ]
+print("Training data dimensions")
+dim(train_data)
+print("Test data dimensions")
+dim(test_data)
+print("Validation data dimensions")
+dim(valid_data)
+optimal_k = 7
+classifier_knn <- kknn(as.factor(V1)~.,
+                      train = train_data,
+                      test = valid_data,
+                      k = optimal_k,
+                      kernel="rectangular"
+)
+kknn.fit <- fitted(classifier_knn)
+confusion_matrix <- table(valid_data$V1, kknn.fit)
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print("Confusion Matrix")
+print(confusion_matrix)
+print("Accuracy")
+print(accuracy)
+f1_score <- F1_Score(kknn.fit, valid_data$V1)
+print("F1 Score")
+f1_score
+
+```
+The easiest to predict and hardest to predict
+```{r easiest_and_hardest_and_print_digit, echo=FALSE}
+data_prob <- data.frame(classifier_knn["prob"])
+data_prob$digit <- valid_data$V1
+prob.digit.three <- data_prob[data_prob$digit == 3,]
+ordered.prob.digit.three <- prob.digit.three[order(prob.digit.three$prob.3),]
+easiest_to_predict <- tail(ordered.prob.digit.three, n = 2)
+hardest_to_predict <- head(ordered.prob.digit.three, n = 2)
+print("hardest to predict")
+hardest_to_predict
+print("easiest to predict")
+easiest_to_predict
+print("easiest to predict")
+for (i in rownames(easiest_to_predict)){
+    print(i)
+    heatmap(matrix(as.numeric(valid_data[as.numeric(i),2:785]), 
+                   byrow=TRUE, ncol=28, nrow=28), Rowv = NA, Colv = NA)
+}
+print("hardest to predict")
+for (i in rownames(hardest_to_predict)){
+    print(i)
+    heatmap(matrix(as.numeric(valid_data[as.numeric(i),2:785]), 
+                   byrow=TRUE, ncol=28, nrow=28), Rowv = NA, Colv = NA)
+}
+
+```
+
+# Logistic Regression Multinomial
+
+  Our Second model of choice is Logistic Regression Multinom  which a statistical model that analyzes the relationship between a response variable (label) and other variable (all the pixels) their interactions
+
+Task break down Logistic Regression
+
+  1. Divide date in testing and training data
+
+  2. Run multinom algorithm from nnet
+  
+  3. We tried with variations of maximum iterations to get optimal model.
+
+  4. Calculate the accuracy for different settings
+
+  5. Plot our graph of accuracy
+
+  6. Calculate confusion matrix
+
+
+we are pre loaded data from our first model
+```{r nnet_multinom_part, echo=FALSE}
+find_optimal_max_iter <- function(max_iter_start, max_iter_end){
+    segration_list <- segregate_data(dim(data)[1], 0.7, 0.5)
+    train_data <- data[segration_list[[1]], ]
+    test_data <- data[segration_list[[2]], ]
+    valid_data <- data[segration_list[[3]], ]
+    max_iter.accuracy <- data.frame()
+    for (i in seq(max_iter_start, max_iter_end , 10)){
+        model <- multinom( as.factor(V1)~., family = "multinomial", 
+                           data = train_data, MaxNWts =10000000, maxit=i)
+        results <- predict(model, newdata=valid_data, type='probs')
+        prediction <- max.col(results)
+        prediction <- prediction - 1
+        miscl <- mean(prediction != valid_data$V1)
+        max_iter.accuracy <- rbind(max_iter.accuracy, c(i, 1-miscl))
+    }
+    colnames(max_iter.accuracy) = c("max_iter", "accuracy")
+    return (list(max_iter.accuracy))
+}
+
+optimal_max_iter <- find_optimal_max_iter(30, 90)
+optimal_max_iter.data <- optimal_max_iter[[1]]
+ggplot(optimal_max_iter.data) +
+  geom_line(aes(x=max_iter, y=accuracy)) +
+  ggtitle("Maximum iterations VS Accuracy")
+
+```
+By looking at the graph we can deduce that with maximum iterations the accuracy is better
+which is 0.70
+
+  F1 score and Confusion matrix for optimal max_iteration Multinom
+```{r f1_score_multinom, echo=FALSE}
+
+best_max_iter = 50
+model <- multinom( as.factor(V1)~., family = "multinomial", 
+                   data = train_data, MaxNWts =10000000, maxit=best_max_iter)
+results <- predict(model, newdata=valid_data, type='probs')
+prediction <- max.col(results)
+confusion_matrix_multinom <- table(prediction, valid_data$V1)
+accuracy_multinom <- (1 - mean(prediction != valid_data$V1))
+print("Accuracy")
+print(accuracy_multinom)
+
+```
+Now we will run both models on test data and verify how it works for test data.
+```{r final_comparison, echo=FALSE}
+best_max_iter = 50
+optimal_k = 7
+classifier_knn <- kknn(as.factor(V1)~.,
+                       train = train_data,
+                       test = test_data,
+                       k = optimal_k,
+                       kernel="rectangular"
+)
+
+kknn.fit <- fitted(classifier_knn)
+confusion_matrix <- table(test_data$V1, kknn.fit)
+accuracy_knn <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print("Confusion Matrix")
+print(confusion_matrix)
+print("KNN Accuracy for test")
+print(accuracy_knn)
+
+model <- multinom( as.factor(V1)~., family = "multinomial",
+                   data = train_data, MaxNWts =10000000, maxit=best_max_iter)
+results <- predict(model, newdata=test_data, type='probs')
+prediction <- max.col(results)
+prediction <- prediction - 1
+confusion_matrix_multinom <- table(prediction, test_data$V1)
+mscl_multinom <- mean(prediction != test_data$V1)
+print("Multinom Accuracy for test")
+print(1- mscl_multinom)
+print(accuracy_knn)
+```
+
+## Conclusion
+
+  from the conclusion we can see that KNN perform better than Multinom, although we tried to set its Hyperparameters, but I think more adjust can be done to make its performance better.
+
+
+
+
+
+  
+
